@@ -17,15 +17,18 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
   String resultString = '';
   bool isPause = false;
   final counterController = Get.find<CountController>();
+  StreamController<bool> stopIsolateStreamController =
+      StreamController<bool>.broadcast();
 
   @override
   void initState() {
     super.initState();
     if (counterController.downloadStreamControllers.isEmpty) {
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 10; i++) {
         final newStream = StreamController<String>.broadcast();
         counterController.downloadStreamControllers.add(newStream);
         counterController.indexList.add(i);
+        counterController.runIsolateList.add(true);
       }
       debugPrint(
           '==> length: ${counterController.downloadStreamControllers.length.toString()}');
@@ -105,6 +108,7 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
                                     index,
                                     counterController
                                         .downloadStreamControllers[index],
+                                    stopIsolateStreamController,
                                   ),
                                 ),
                               ],
@@ -118,6 +122,23 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
                 },
               ),
             ],
+          ),
+        ),
+        SizedBox(
+          width: 150,
+          child: ElevatedButton(
+            onPressed: () {
+              counterController.stopIsolate.toggle();
+              stopIsolateStreamController.sink
+                  .add(counterController.stopIsolate.value);
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.settings_power_rounded),
+                Text('Stop Isolate'),
+              ],
+            ),
           ),
         ),
       ],

@@ -10,19 +10,22 @@ import 'package:get/get.dart' as getnef;
 import 'package:path_provider/path_provider.dart';
 
 class IsolatedDownloadHandler {
-  IsolatedDownloadHandler(this.url, this.index, this.downloadFileStream) {
+  IsolatedDownloadHandler(this.url, this.index, this.downloadFileStream,
+      this.stopIsolateStreamController) {
     firstRun();
   }
 
   final String url;
   final int index;
   final StreamController<String> downloadFileStream;
+  final StreamController<bool> stopIsolateStreamController;
 
   Isolate? myIsolate;
   final counterController = getnef.Get.find<CountController>();
 
   void createNewIsolate(String url, String savePath) async {
     ReceivePort receivePort = ReceivePort();
+    Capability newCapability = Capability();
     try {
       myIsolate = await Isolate.spawn(runDownloadTask, [
         receivePort.sendPort,
@@ -33,32 +36,39 @@ class IsolatedDownloadHandler {
       debugPrint(e.toString());
       receivePort.close();
     }
+    stopIsolateStreamController.stream.listen((event) {
+      if (event && counterController.runIsolateList[index]) {
+        myIsolate!.pause(newCapability);
+      } else {
+        myIsolate!.resume(newCapability);
+      }
+    });
     receivePort.listen(
       (message) {
         if (message == 'Đã tải xong') {
-          counterController.indexList.remove(index);
-          debugPrint('$index - xyz 1');
+          debugPrint('heheh - $index');
+          counterController.runIsolateList[index] = false;
+          stopIsolateStreamController.sink.add(true);
+          counterController.subStreamControllers.remove(downloadFileStream);
           counterController.doneStreamControllers.add(downloadFileStream);
-          debugPrint('$index - xyz 2');
           counterController.doneStreamControllers.value =
               counterController.doneStreamControllers.toSet().toList();
-          debugPrint('$index - xyz 3');
-          downloadFileStream.close();
-          counterController.subStreamControllers.remove(downloadFileStream);
-          debugPrint('$index - xyz 4');
+
           for (var stream in counterController.downloadStreamControllers) {
-            if (counterController.subStreamControllers.length < 5) {
+            if (counterController.subStreamControllers.length < 6) {
               if (!counterController.doneStreamControllers.contains(stream) &&
                   !counterController.subStreamControllers.contains(stream)) {
                 counterController.subStreamControllers.add(stream);
+                counterController.downloadStreamControllers[10 -
+                    (10 - 5 - counterController.doneStreamControllers.length) -
+                    1] = stream;
               }
             }
           }
-          debugPrint('$index - xyz 5');
           if (myIsolate != null) {
+            stopIsolateStreamController.sink.add(false);
             myIsolate?.kill(priority: Isolate.immediate);
           }
-          debugPrint('$index - xyz end');
         } else {
           downloadFileStream.add(message);
         }
@@ -148,7 +158,7 @@ class IsolatedDownloadHandler {
   }
 
   void firstRun() async {
-    if (counterController.doneStreamControllers.length !=
+    if (counterController.doneStreamControllers.length <=
         counterController.downloadStreamControllers.length) {
       if (counterController.doneStreamControllers.isEmpty) {
         if (counterController.subStreamControllers
