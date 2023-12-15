@@ -79,7 +79,7 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
                         IsolatedDownloadHandler.instance.prepareForFirstRun();
                         counterController.urls.add((index % 2 == 0)
                             ? 'https://upload.wikimedia.org/wikipedia/commons/6/60/The_Organ_at_Arches_National_Park_Utah_Corrected.jpg'
-                            : 'https://upload.wikimedia.org/wikipedia/commons/7/78/Canyonlands_National_Park%E2%80%A6Needles_area_%286294480744%29.jpg');
+                            : 'https://upload.wikimedia.org/wikipedia/commons/e/e4/GatesofArctic.jpg');
                         if (counterController.downloadedIsolate[index]) {
                           return Column(
                             children: [

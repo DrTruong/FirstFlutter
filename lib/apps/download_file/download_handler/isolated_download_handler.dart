@@ -36,6 +36,7 @@ class IsolatedDownloadHandler {
     ReceivePort receivePort = ReceivePort();
     Capability capability = Capability();
     try {
+      debugPrint('downloading... $index');
       final newIsolate = await Isolate.spawn(runDownloadTask, [
         receivePort.sendPort,
         url,
@@ -72,6 +73,7 @@ class IsolatedDownloadHandler {
           counterController.runIsolateList[index] = false;
           downloadFileStream.close();
           counterController.doneStreamControllers.add(downloadFileStream);
+          counterController.subStreamControllers.remove(downloadFileStream);
           await setDoneStreamControllersUnique();
           await addNextDownloadIsolate(savePath);
           await stoppingDownloadIsolate(false);
@@ -132,7 +134,9 @@ class IsolatedDownloadHandler {
   }
 
   void firstRun() async {
-    counterController.triggerFirstRun.value = true;
+    debugPrint('firstrun ==> start');
+    debugPrint(
+        'firstrun ==> ${counterController.downloadStreamControllers.length}');
     for (int i = 0;
         i < counterController.downloadStreamControllers.length;
         i++) {
@@ -166,13 +170,16 @@ class IsolatedDownloadHandler {
         final url = counterController.urls[i];
         final downloadFileStream =
             counterController.downloadStreamControllers[i];
-        if (counterController.subStreamControllers.length <
-            counterController.downloadStreamControllers.length) {
+        debugPrint('==> ${counterController.subStreamControllers.length}');
+        if (counterController.subStreamControllers.length < 5) {
           if (!counterController.doneStreamControllers.contains(stream) &&
               !counterController.subStreamControllers.contains(stream)) {
             counterController.subStreamControllers.add(stream);
+            debugPrint(counterController.downloadStreamControllers
+                .indexOf(stream)
+                .toString());
             createNewIsolate(
-              counterController.subStreamControllers.indexOf(stream),
+              counterController.downloadStreamControllers.indexOf(stream),
               url,
               savePath,
               downloadFileStream,
@@ -201,7 +208,7 @@ class IsolatedDownloadHandler {
 
   void initValueToCreateIsolate() {
     if (counterController.downloadStreamControllers.isEmpty) {
-      for (int i = 0; i < 20; i++) {
+      for (int i = 0; i < 100; i++) {
         counterController.indexList.add(i);
         counterController.runIsolateList.add(true);
         counterController.downloadedIsolate.add(false);

@@ -15,7 +15,6 @@ class CountController extends GetxController {
   RxList<String> urls = <String>[].obs;
   RxList<Isolate> isolates = <Isolate>[].obs;
   RxList<Capability> capabilities = <Capability>[].obs;
-  RxBool triggerFirstRun = false.obs;
   RxList<bool> downloadedIsolate = <bool>[].obs;
 
   void getFirstSubStream() {
