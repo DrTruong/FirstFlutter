@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 class DownloadItemWidget extends StatefulWidget {
   const DownloadItemWidget({
     super.key,
-    required this.isolatedDownload,
+    required this.index,
   });
-  final IsolatedDownloadHandler isolatedDownload;
+  final int index;
 
   @override
   State<DownloadItemWidget> createState() => _DownloadItemWidgetState();
@@ -20,7 +20,8 @@ class _DownloadItemWidgetState extends State<DownloadItemWidget> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           StreamBuilder(
-            stream: widget.isolatedDownload.downloadFileStream.stream,
+            stream: IsolatedDownloadHandler
+                .instance.downloadStreamControllers[widget.index].stream,
             builder: ((context, snapshot) {
               if (snapshot.hasData) {
                 return Text(snapshot.data!);

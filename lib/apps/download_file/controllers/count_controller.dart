@@ -12,7 +12,11 @@ class CountController extends GetxController {
   RxList<StreamController<String>> doneStreamControllers =
       <StreamController<String>>[].obs;
   RxList<bool> runIsolateList = <bool>[].obs;
-  RxBool stopIsolate = false.obs;
+  RxList<String> urls = <String>[].obs;
+  RxList<Isolate> isolates = <Isolate>[].obs;
+  RxList<Capability> capabilities = <Capability>[].obs;
+  RxBool triggerFirstRun = false.obs;
+  RxList<bool> downloadedIsolate = <bool>[].obs;
 
   void getFirstSubStream() {
     var subStream = downloadStreamControllers.sublist(0, 5);

@@ -10,102 +10,77 @@ import 'package:get/get.dart' as getnef;
 import 'package:path_provider/path_provider.dart';
 
 class IsolatedDownloadHandler {
-  IsolatedDownloadHandler(this.url, this.index, this.downloadFileStream,
-      this.stopIsolateStreamController) {
-    firstRun();
+  static IsolatedDownloadHandler? _instance;
+
+  IsolatedDownloadHandler._();
+
+  static IsolatedDownloadHandler get instance {
+    _instance ??= IsolatedDownloadHandler._();
+    return _instance!;
   }
 
-  final String url;
-  final int index;
-  final StreamController<String> downloadFileStream;
-  final StreamController<bool> stopIsolateStreamController;
+  List<String> urls = [];
+  List<StreamController<String>> downloadStreamControllers = [];
+  StreamController<bool> stopIsolateStreamController =
+      StreamController<bool>.broadcast();
 
-  Isolate? myIsolate;
   final counterController = getnef.Get.find<CountController>();
 
-  void createNewIsolate(String url, String savePath) async {
+  void createNewIsolate(
+    int index,
+    String url,
+    String savePath,
+    StreamController<String> downloadFileStream,
+    StreamController<bool> stopIsolateStreamController,
+  ) async {
     ReceivePort receivePort = ReceivePort();
-    Capability newCapability = Capability();
+    Capability capability = Capability();
     try {
-      myIsolate = await Isolate.spawn(runDownloadTask, [
+      final newIsolate = await Isolate.spawn(runDownloadTask, [
         receivePort.sendPort,
         url,
         savePath,
       ]);
+      counterController.isolates.add(newIsolate);
+      counterController.capabilities.add(capability);
     } catch (e) {
       debugPrint(e.toString());
       receivePort.close();
     }
     stopIsolateStreamController.stream.listen((event) {
-      if (event && counterController.runIsolateList[index]) {
-        myIsolate!.pause(newCapability);
+      final isolate = counterController.isolates[index];
+      final capability = counterController.capabilities[index];
+      if (event) {
+        if (event && counterController.runIsolateList[index]) {
+          debugPrint('paused - $event - $index');
+          isolate.pause(capability);
+        } else {
+          debugPrint('resume - $event - $index');
+          isolate.resume(capability);
+        }
       } else {
-        myIsolate!.resume(newCapability);
+        isolate.resume(capability);
       }
     });
     receivePort.listen(
-      (message) {
+      (message) async {
         if (message == 'Đã tải xong') {
+          await stoppingDownloadIsolate(true);
+          counterController.downloadedIsolate[index] = true;
           debugPrint('heheh - $index');
+          downloadFileStream.add(message);
           counterController.runIsolateList[index] = false;
-          stopIsolateStreamController.sink.add(true);
-          counterController.subStreamControllers.remove(downloadFileStream);
+          downloadFileStream.close();
           counterController.doneStreamControllers.add(downloadFileStream);
-          counterController.doneStreamControllers.value =
-              counterController.doneStreamControllers.toSet().toList();
-
-          for (var stream in counterController.downloadStreamControllers) {
-            if (counterController.subStreamControllers.length < 6) {
-              if (!counterController.doneStreamControllers.contains(stream) &&
-                  !counterController.subStreamControllers.contains(stream)) {
-                counterController.subStreamControllers.add(stream);
-                counterController.downloadStreamControllers[10 -
-                    (10 - 5 - counterController.doneStreamControllers.length) -
-                    1] = stream;
-              }
-            }
-          }
-          if (myIsolate != null) {
-            stopIsolateStreamController.sink.add(false);
-            myIsolate?.kill(priority: Isolate.immediate);
-          }
+          await setDoneStreamControllersUnique();
+          await addNextDownloadIsolate(savePath);
+          await stoppingDownloadIsolate(false);
+          debugPrint('killed - $index');
         } else {
           downloadFileStream.add(message);
         }
       },
     );
-
-    // final dio = Dio();
-    // try {
-    //   Response response = await dio.get(
-    //     url,
-    //     options: Options(
-    //       responseType: ResponseType.bytes,
-    //       followRedirects: false,
-    //       validateStatus: (status) {
-    //         return status! < 500;
-    //       },
-    //     ),
-    //     onReceiveProgress: (received, total) {
-    //       downloadFileStream.add(
-    //           '${(received / total * 100).toStringAsFixed(2).toString()} %');
-    //       if (received == total) {
-    //         downloadFileStream.add('Đã tải xong');
-    //         counterController.counter.remove(index);
-    //         counterController.streamControllers.remove(downloadFileStream);
-    //       }
-    //     },
-    //   );
-    //   debugPrint('download handle ==> ${response.headers}');
-    //   File file = File(savePath);
-    //   var raf = file.openSync(mode: FileMode.write);
-    //   raf.writeFromSync(response.data);
-    //   await raf.close();
-    // } on DioException catch (_) {
-    //   createNewIsolate(url, savePath);
-    // } catch (e) {
-    //   downloadFileStream.add(e.toString());
-    // }
   }
 
   static void runDownloadTask(List<dynamic> args) async {
@@ -130,7 +105,6 @@ class IsolatedDownloadHandler {
           }
         },
       );
-      debugPrint('download handle ==> ${response.headers}');
       File file = File(args[2]);
       var raf = file.openSync(mode: FileMode.write);
       raf.writeFromSync(response.data);
@@ -158,24 +132,95 @@ class IsolatedDownloadHandler {
   }
 
   void firstRun() async {
+    counterController.triggerFirstRun.value = true;
+    for (int i = 0;
+        i < counterController.downloadStreamControllers.length;
+        i++) {
+      final stream = counterController.downloadStreamControllers[i];
+      final url = counterController.urls[i];
+      if (counterController.subStreamControllers.contains(stream)) {
+        var temporary = await getTemporaryDirectory();
+        createNewIsolate(
+          i,
+          url,
+          '${temporary.path}/${_getRandomString(10)}.mp4',
+          stream,
+          stopIsolateStreamController,
+        );
+        url == 'https://upload.wikimedia.org/wikipedia/commons/6/60/The_Organ_at_Arches_National_Park_Utah_Corrected.jpg'
+            ? debugPrint('firstRun - link 1')
+            : debugPrint('firstRun - link 2');
+      }
+    }
+    debugPrint('\n');
+  }
+
+  Future<void> addNextDownloadIsolate(String savePath) async {
     if (counterController.doneStreamControllers.length <=
         counterController.downloadStreamControllers.length) {
-      if (counterController.doneStreamControllers.isEmpty) {
-        if (counterController.subStreamControllers
-            .contains(downloadFileStream)) {
-          var temporary = await getTemporaryDirectory();
-          createNewIsolate(
-              url, '${temporary.path}/${_getRandomString(10)}.mp4');
+      debugPrint('vaonef');
+      for (int i = 0;
+          i < counterController.downloadStreamControllers.length;
+          i++) {
+        final stream = counterController.downloadStreamControllers[i];
+        final url = counterController.urls[i];
+        final downloadFileStream =
+            counterController.downloadStreamControllers[i];
+        if (counterController.subStreamControllers.length <
+            counterController.downloadStreamControllers.length) {
+          if (!counterController.doneStreamControllers.contains(stream) &&
+              !counterController.subStreamControllers.contains(stream)) {
+            counterController.subStreamControllers.add(stream);
+            createNewIsolate(
+              counterController.subStreamControllers.indexOf(stream),
+              url,
+              savePath,
+              downloadFileStream,
+              stopIsolateStreamController,
+            );
+            url == 'https://upload.wikimedia.org/wikipedia/commons/6/60/The_Organ_at_Arches_National_Park_Utah_Corrected.jpg'
+                ? debugPrint(
+                    'nextRun - link 1 - index ${counterController.subStreamControllers.indexOf(stream)}')
+                : debugPrint(
+                    'nextRun - link 2 - index ${counterController.subStreamControllers.indexOf(stream)}');
+          }
         }
-      } else {
-        if (counterController.subStreamControllers
-                .contains(downloadFileStream) &&
-            !counterController.doneStreamControllers
-                .contains(downloadFileStream)) {
-          var temporary = await getTemporaryDirectory();
-          createNewIsolate(
-              url, '${temporary.path}/${_getRandomString(10)}.mp4');
-        }
+      }
+      debugPrint('\n');
+    }
+  }
+
+  Future<void> stoppingDownloadIsolate(bool isRun) async {
+    stopIsolateStreamController.sink.add(isRun);
+  }
+
+  Future<void> setDoneStreamControllersUnique() async {
+    counterController.doneStreamControllers.value =
+        counterController.doneStreamControllers.toSet().toList();
+  }
+
+  void initValueToCreateIsolate() {
+    if (counterController.downloadStreamControllers.isEmpty) {
+      for (int i = 0; i < 20; i++) {
+        counterController.indexList.add(i);
+        counterController.runIsolateList.add(true);
+        counterController.downloadedIsolate.add(false);
+      }
+      IsolatedDownloadHandler.instance.downloadStreamControllers =
+          counterController.downloadStreamControllers;
+    }
+  }
+
+  void prepareForFirstRun() {
+    if (counterController.downloadStreamControllers.length <
+        counterController.indexList.length) {
+      final newStream = StreamController<String>.broadcast();
+      counterController.downloadStreamControllers.add(newStream);
+    }
+    if (counterController.downloadStreamControllers.length == 5) {
+      counterController.getFirstSubStream();
+      if (counterController.subStreamControllers.isNotEmpty) {
+        IsolatedDownloadHandler.instance.firstRun();
       }
     }
   }

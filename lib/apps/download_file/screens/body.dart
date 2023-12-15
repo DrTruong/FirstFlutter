@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:first_flutter/apps/download_file/controllers/count_controller.dart';
 import 'package:first_flutter/apps/download_file/download_handler/isolated_download_handler.dart';
 import 'package:first_flutter/apps/download_file/widgets/download_item.dart';
@@ -17,24 +15,11 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
   String resultString = '';
   bool isPause = false;
   final counterController = Get.find<CountController>();
-  StreamController<bool> stopIsolateStreamController =
-      StreamController<bool>.broadcast();
 
   @override
   void initState() {
     super.initState();
-    if (counterController.downloadStreamControllers.isEmpty) {
-      for (int i = 0; i < 10; i++) {
-        final newStream = StreamController<String>.broadcast();
-        counterController.downloadStreamControllers.add(newStream);
-        counterController.indexList.add(i);
-        counterController.runIsolateList.add(true);
-      }
-      debugPrint(
-          '==> length: ${counterController.downloadStreamControllers.length.toString()}');
-      counterController.getFirstSubStream();
-      debugPrint('==> done');
-    }
+    IsolatedDownloadHandler.instance.initValueToCreateIsolate();
   }
 
   @override
@@ -89,56 +74,50 @@ class _DownloadFileBodyState extends State<DownloadFileBody> {
                   List<int> counter = counterController.indexList.value;
                   return Expanded(
                     child: ListView.builder(
-                      itemCount:
-                          counterController.downloadStreamControllers.length,
+                      itemCount: counterController.indexList.length,
                       itemBuilder: (context, index) {
-                        return Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                    '${counter.isNotEmpty ? counterController.indexList[index] : '?'} - '),
-                                DownloadItemWidget(
-                                  key: Key(index.toString()),
-                                  isolatedDownload: IsolatedDownloadHandler(
-                                    (index % 2 == 0)
-                                        ? 'https://enos.itcollege.ee/~jpoial/allalaadimised/reading/Android-Programming-Cookbook.pdf'
-                                        : 'https://files.stm.devitkv2.com:9000/stm-dev/9b7569d4-d29f-4ce1-b327-ae9a4a1cb68c/2023/12/782ea6e1-facb-4e97-8e7a-3f2740263bd0/chat/video/3e31b495-f13a-4406-b584-9456230b5a5f.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=stmminio%2F20231206%2Fa%2Fs3%2Faws4_request&X-Amz-Date=20231206T074741Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=ec6f2ee98af52f26352e407fc522610f9edcfcf02cfa94d43cc978550992577e',
-                                    index,
-                                    counterController
-                                        .downloadStreamControllers[index],
-                                    stopIsolateStreamController,
+                        IsolatedDownloadHandler.instance.prepareForFirstRun();
+                        counterController.urls.add((index % 2 == 0)
+                            ? 'https://upload.wikimedia.org/wikipedia/commons/6/60/The_Organ_at_Arches_National_Park_Utah_Corrected.jpg'
+                            : 'https://upload.wikimedia.org/wikipedia/commons/7/78/Canyonlands_National_Park%E2%80%A6Needles_area_%286294480744%29.jpg');
+                        if (counterController.downloadedIsolate[index]) {
+                          return Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                      '${counter.isNotEmpty ? counterController.indexList[index] : '?'} - '),
+                                  const Text('File đã được tải !'),
+                                ],
+                              ),
+                              const SizedBox(height: 50),
+                            ],
+                          );
+                        } else {
+                          return Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                      '${counter.isNotEmpty ? counterController.indexList[index] : '?'} - '),
+                                  DownloadItemWidget(
+                                    key: Key(index.toString()),
+                                    index: index,
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 50),
-                          ],
-                        );
+                                ],
+                              ),
+                              const SizedBox(height: 50),
+                            ],
+                          );
+                        }
                       },
                     ),
                   );
                 },
               ),
             ],
-          ),
-        ),
-        SizedBox(
-          width: 150,
-          child: ElevatedButton(
-            onPressed: () {
-              counterController.stopIsolate.toggle();
-              stopIsolateStreamController.sink
-                  .add(counterController.stopIsolate.value);
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.settings_power_rounded),
-                Text('Stop Isolate'),
-              ],
-            ),
           ),
         ),
       ],
